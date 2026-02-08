@@ -10,7 +10,7 @@ services:
       - WEB_PORT=3000
       - WEB_URL=https://aturuang.hanif.app
     volumes:
-      - aturuang-data:/app/data
+      - /data/aturuang:/app/data
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -25,6 +25,3 @@ services:
 networks:
   coolify:
     external: true
-
-volumes:
-  aturuang-data:
