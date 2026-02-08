@@ -35,7 +35,7 @@ export function createBot(token: string) {
   bot.command("start", async (ctx) => {
     const name = ctx.from?.first_name || "there";
     await ctx.reply(
-      `Yo ${name}! 👋\n\nGue *AturUang* — SatuRuang buat atur keuangan lo.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n📸 *Foto struk/invoice juga bisa!*\nKirim foto struk ShopeeFood, GrabFood, atau struk belanja — gue baca otomatis.\n\n*Commands:*\n/today • /week • /month\n/recent • /undo • /setpassword\n\nGas! 💸`,
+      `Yo ${name}! 👋\n\nGue *AturUang* — SatuRuang buat atur keuangan lo.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n📸 *Foto struk/invoice juga bisa!*\nKirim foto struk ShopeeFood, GrabFood, atau struk belanja — gue baca otomatis.\n\n*Commands:*\n/today • /week • /month\n/recent • /undo\n/setpassword • /customid\n\nGas! 💸`,
       { parse_mode: "Markdown" }
     );
   });
@@ -57,10 +57,43 @@ export function createBot(token: string) {
     });
 
     const webUrl = process.env.WEB_URL || "https://aturuang.hanif.app";
+    const user = await prisma.user.findUnique({ where: { tgId } });
+    const loginId = user?.customId || tgId;
     await ctx.reply(
-      `✅ Password udah ke-set!\n\nBuka dashboard di:\n${webUrl}\n\nLogin pake ID: \`${tgId}\``,
+      `✅ Password udah ke-set!\n\nBuka dashboard di:\n${webUrl}\n\nLogin pake ID: \`${loginId}\`\n\n💡 Mau custom ID? Ketik /customid <id\_baru>`,
       { parse_mode: "Markdown" }
     );
+  });
+
+  bot.command("customid", async (ctx) => {
+    const tgId = ctx.from?.id.toString();
+    const args = ctx.message?.text?.split(" ").slice(1).join(" ").trim();
+    if (!tgId) return;
+
+    if (!args || args.length < 3) {
+      await ctx.reply("Format: `/customid <id_baru>`\nMin 3 karakter, huruf/angka/underscore aja.", { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(args)) {
+      await ctx.reply("ID cuma boleh huruf, angka, sama underscore ya.");
+      return;
+    }
+
+    // Check if customId already taken
+    const existing = await prisma.user.findUnique({ where: { customId: args } });
+    if (existing && existing.tgId !== tgId) {
+      await ctx.reply("ID `" + args + "` udah dipake orang lain. Coba yang lain.", { parse_mode: "Markdown" });
+      return;
+    }
+
+    await prisma.user.upsert({
+      where: { tgId },
+      update: { customId: args, name: ctx.from?.first_name },
+      create: { tgId, customId: args, name: ctx.from?.first_name },
+    });
+
+    await ctx.reply(`✅ Custom ID ke-set: \`${args}\`\n\nSekarang lo bisa login pake ID ini.`, { parse_mode: "Markdown" });
   });
 
   bot.command("today", async (ctx) => {

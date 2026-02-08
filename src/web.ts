@@ -33,13 +33,17 @@ export function createWeb() {
   // API: Auth
   app.post("/api/auth", async (c) => {
     const { tgId, password } = await c.req.json();
-    const user = await prisma.user.findUnique({ where: { tgId } });
+    // Try finding by tgId first, then by customId
+    let user = await prisma.user.findUnique({ where: { tgId } });
+    if (!user) {
+      user = await prisma.user.findUnique({ where: { customId: tgId } });
+    }
 
     if (!user || user.password !== password) {
       return c.json({ error: "Invalid credentials" }, 401);
     }
 
-    return c.json({ success: true, name: user.name, theme: user.theme });
+    return c.json({ success: true, name: user.name, theme: user.theme, tgId: user.tgId });
   });
 
   // API: Dashboard data
@@ -223,8 +227,8 @@ const LOGIN_HTML = `<!DOCTYPE html>
 
     <form id="loginForm">
       <div class="input-group">
-        <label>Telegram ID</label>
-        <input type="text" id="tgId" placeholder="123456789" required>
+        <label>Telegram ID / Custom ID</label>
+        <input type="text" id="tgId" placeholder="123456789 atau custom_id" required>
       </div>
       <div class="input-group">
         <label>Password</label>
@@ -265,7 +269,7 @@ const LOGIN_HTML = `<!DOCTYPE html>
         }
 
         const data = await res.json();
-        localStorage.setItem('tgId', document.getElementById('tgId').value);
+        localStorage.setItem('tgId', data.tgId || document.getElementById('tgId').value);
         localStorage.setItem('name', data.name || '');
         localStorage.setItem('theme', data.theme || 'dark');
         window.location.href = '/dashboard';
