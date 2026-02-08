@@ -21,38 +21,71 @@ export interface ParseResult {
   error?: string;
 }
 
-const SYSTEM_PROMPT = `Kamu adalah AI assistant yang membantu mencatat pengeluaran dari pesan casual bahasa Indonesia.
+const SYSTEM_PROMPT = `Kamu adalah AI yang mencatat pengeluaran dari chat casual bahasa Indonesia/Jaksel.
 
-Tugasmu:
-1. Extract semua pengeluaran dari pesan user
-2. Parse amount dalam Rupiah (20k = 20000, 1.5jt = 1500000)
-3. Detect mood/emosi dari context (happy, satisfied, neutral, reluctant, regret, guilty, excited, etc)
-4. Extract cerita/alasan di balik pengeluaran sebagai "story"
-5. Kategorikan expense: food, coffee, transport, shopping, entertainment, bills, health, etc
-6. Handle tanggal relatif: "kemarin" = yesterday, "tadi" = today, etc
+PARSING RULES:
+1. Amount: "20k" = 20000, "1.5jt" = 1500000, "50rb" = 50000, "80ribu" = 80000
+2. Jika 1 harga untuk multiple items, gabung jadi 1 expense (contoh: "bebek + jus 80k")
+3. Mood: detect dari context - "nyesel", "males", "seneng", "puas", dll
+4. Story: ambil reasoning/feeling dari pesan, bukan deskripsi item
+5. Place: lokasi pembelian jika disebutkan
+6. Date: "kemarin" = yesterday, "tadi/barusan" = today, default = today
+7. Jika ada multiple expense TERPISAH dengan harga masing-masing, return multiple items
 
-Output HARUS dalam format JSON valid:
+MOOD OPTIONS:
+- happy, excited, satisfied (positive vibes)
+- neutral (no strong emotion)
+- reluctant, regret, guilty (negative vibes)
+
+SLANG/GAUL MAPPING:
+- "gw/gue/w" = saya
+- "nyesel" = regret
+- "males" = reluctant
+- "asik/seru/mantep" = happy
+- "puas/worth" = satisfied
+- "k/rb/ribu" = 000
+- "jt/juta" = 000000
+
+OUTPUT FORMAT (JSON):
 {
-  "expenses": [
-    {
-      "amount": 35000,
-      "item": "hot chocolate hazelnut",
-      "category": "coffee",
-      "place": "Arah Coffee",
-      "withPerson": "temen kantor",
-      "mood": "satisfied",
-      "story": "lagi butuh me time karena kerjaan hectic",
-      "date": "2024-02-07"
-    }
-  ]
+  "expenses": [{
+    "amount": number,
+    "item": string,
+    "category": "food"|"coffee"|"transport"|"shopping"|"entertainment"|"bills"|"health"|"groceries"|"snack"|"drink"|"other",
+    "place": string|null,
+    "withPerson": string|null,
+    "mood": string|null,
+    "story": string|null,
+    "date": "YYYY-MM-DD"
+  }]
 }
 
-Rules:
-- Jika ada multiple expenses dalam 1 pesan, extract semua
-- "story" adalah konteks emosional/alasan, bukan deskripsi item
-- Jika tidak ada info, set null (jangan string kosong)
-- Amount HARUS angka (bukan string)
-- Date dalam format ISO (YYYY-MM-DD)`;
+CONTOH:
+
+Input: "beli makan bebek bakar di kantin kantor 80k udah sama minum jus tomat, mahal banget dah, nyesel beli disitu lagi, tapi enak"
+Output: {"expenses":[{"amount":80000,"item":"bebek bakar + jus tomat","category":"food","place":"kantin kantor","mood":"regret","story":"mahal banget tapi enak","date":"2024-02-08"}]}
+
+Input: "grab 45k males jalan kaki hujan"
+Output: {"expenses":[{"amount":45000,"item":"grab","category":"transport","place":null,"mood":"reluctant","story":"males jalan kaki karena hujan","date":"2024-02-08"}]}
+
+Input: "kopi 35k sama temen di starbucks seru banget ngobrolnya"
+Output: {"expenses":[{"amount":35000,"item":"kopi","category":"coffee","place":"starbucks","withPerson":"temen","mood":"happy","story":"seru ngobrol","date":"2024-02-08"}]}
+
+Input: "makan 20k"
+Output: {"expenses":[{"amount":20000,"item":"makan","category":"food","place":null,"mood":null,"story":null,"date":"2024-02-08"}]}
+
+Input: "makan 50k, kopi 25k, grab 30k"
+Output: {"expenses":[{"amount":50000,"item":"makan","category":"food","place":null,"mood":null,"story":null,"date":"2024-02-08"},{"amount":25000,"item":"kopi","category":"coffee","place":null,"mood":null,"story":null,"date":"2024-02-08"},{"amount":30000,"item":"grab","category":"transport","place":null,"mood":null,"story":null,"date":"2024-02-08"}]}
+
+Input: "kemarin kopi 35k di starbucks sama pacar"
+Output: {"expenses":[{"amount":35000,"item":"kopi","category":"coffee","place":"starbucks","withPerson":"pacar","mood":null,"story":null,"date":"YESTERDAY_DATE"}]}
+
+PENTING:
+- Selalu extract expense meskipun pesan panjang/rumit
+- Jika ada multiple expense terpisah dengan harga masing2, return multiple items
+- Jika 1 harga untuk beberapa item (paket/bundling), gabung jadi 1 item
+- Jangan return array kosong kecuali benar-benar tidak ada info expense
+- "story" = emosi/alasan, bukan repeat deskripsi item`;
 
 export async function parseExpense(
   message: string,
@@ -65,7 +98,7 @@ export async function parseExpense(
     const yesterdayStr = yesterday.toISOString().split("T")[0];
 
     const response = await openai.chat.completions.create({
-      model: "anthropic/claude-3.5-haiku",
+      model: "anthropic/claude-3.5-sonnet",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {

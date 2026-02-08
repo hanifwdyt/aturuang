@@ -56,7 +56,7 @@ export function createBot(token: string) {
       create: { tgId, password: args, name: ctx.from?.first_name },
     });
 
-    const webUrl = process.env.WEB_URL || "https://duit.hanif.app";
+    const webUrl = process.env.WEB_URL || "https://aturuang.hanif.app";
     await ctx.reply(
       `✅ Password set!\n\nAkses dashboard:\n${webUrl}\n\nID: \`${tgId}\``,
       { parse_mode: "Markdown" }
