@@ -126,3 +126,106 @@ ${message}`,
     return { expenses: [], error: String(error) };
   }
 }
+
+const RECEIPT_PROMPT = `Kamu adalah AI yang membaca struk/invoice/receipt dari foto dan mengekstrak pengeluaran.
+
+TUGAS:
+1. Baca semua item dari struk/invoice
+2. Extract setiap item dengan harga masing-masing
+3. Detect toko/merchant dari header struk
+4. Categorize setiap item
+
+KATEGORI:
+- food: makanan berat
+- coffee: kopi, minuman cafe
+- snack: cemilan, dessert
+- drink: minuman non-kopi
+- groceries: belanja bulanan, supermarket
+- shopping: barang non-makanan
+- transport: ojol, taxi, bensin
+- entertainment: hiburan, game
+- bills: tagihan, pulsa
+- health: obat, apotek
+- other: lainnya
+
+OUTPUT FORMAT (JSON):
+{
+  "expenses": [{
+    "amount": number,
+    "item": string,
+    "category": string,
+    "place": string|null,
+    "mood": null,
+    "story": null,
+    "date": "YYYY-MM-DD"
+  }],
+  "merchant": string|null,
+  "total": number|null
+}
+
+CONTOH OUTPUT:
+{
+  "expenses": [
+    {"amount": 25000, "item": "Nasi Goreng Special", "category": "food", "place": "ShopeeFood", "mood": null, "story": null, "date": "2024-02-08"},
+    {"amount": 8000, "item": "Es Teh Manis", "category": "drink", "place": "ShopeeFood", "mood": null, "story": null, "date": "2024-02-08"}
+  ],
+  "merchant": "Warung Pak Kumis",
+  "total": 33000
+}
+
+PENTING:
+- Baca SEMUA item yang terlihat di struk
+- Harga harus dalam Rupiah (tanpa Rp, tanpa titik)
+- Jika ada ongkir/fee, masukkan sebagai item terpisah dengan category "transport"
+- Jika struk tidak jelas/buram, tetap coba extract yang terbaca`;
+
+export async function parseReceipt(
+  imageBase64: string,
+  caption?: string,
+  today: Date = new Date()
+): Promise<ParseResult & { merchant?: string; total?: number }> {
+  try {
+    const todayStr = today.toISOString().split("T")[0];
+
+    const response = await openai.chat.completions.create({
+      model: "anthropic/claude-3.5-sonnet",
+      messages: [
+        { role: "system", content: RECEIPT_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`,
+              },
+            },
+            {
+              type: "text",
+              text: `Tanggal hari ini: ${todayStr}\n\nExtract semua expense dari struk/invoice ini.${caption ? `\n\nCatatan user: ${caption}` : ""}`,
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 2000,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return { expenses: [], error: "No response from AI" };
+    }
+
+    // Extract JSON from response (sometimes wrapped in markdown)
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { expenses: [], error: "No JSON in response" };
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return parsed;
+  } catch (error) {
+    console.error("Receipt parsing error:", error);
+    return { expenses: [], error: String(error) };
+  }
+}

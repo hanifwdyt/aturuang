@@ -1,6 +1,6 @@
 import { Bot, InlineKeyboard } from "grammy";
 import { PrismaClient } from "@prisma/client";
-import { parseExpense } from "./ai.js";
+import { parseExpense, parseReceipt } from "./ai.js";
 import {
   format,
   startOfDay,
@@ -35,7 +35,7 @@ export function createBot(token: string) {
   bot.command("start", async (ctx) => {
     const name = ctx.from?.first_name || "there";
     await ctx.reply(
-      `Yo ${name}! 👋\n\nGue *AturUang* — SatuRuang buat atur keuangan lo.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n*Commands:*\n/today • /week • /month\n/recent • /undo • /setpassword\n\nGas! 💸`,
+      `Yo ${name}! 👋\n\nGue *AturUang* — SatuRuang buat atur keuangan lo.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n📸 *Foto struk/invoice juga bisa!*\nKirim foto struk ShopeeFood, GrabFood, atau struk belanja — gue baca otomatis.\n\n*Commands:*\n/today • /week • /month\n/recent • /undo • /setpassword\n\nGas! 💸`,
       { parse_mode: "Markdown" }
     );
   });
@@ -246,6 +246,82 @@ export function createBot(token: string) {
 
     msg += `\n📊 Total hari ini: *${fmt(todayTotal._sum.amount || 0)}*`;
     await ctx.reply(msg, { parse_mode: "Markdown" });
+  });
+
+  // Handle photo messages (receipts, invoices)
+  bot.on("message:photo", async (ctx) => {
+    const tgId = ctx.from?.id.toString();
+    if (!tgId) return;
+
+    await ctx.replyWithChatAction("typing");
+
+    try {
+      // Get the largest photo size
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      const file = await ctx.api.getFile(photo.file_id);
+
+      if (!file.file_path) {
+        await ctx.reply("Ga bisa download foto 😅");
+        return;
+      }
+
+      // Download the image
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+      const response = await fetch(fileUrl);
+      const buffer = await response.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+
+      // Parse the receipt
+      const caption = ctx.message.caption;
+      const result = await parseReceipt(base64, caption);
+
+      if (result.error || result.expenses.length === 0) {
+        await ctx.reply("Hmm gue ga bisa baca struk ini 🤔\n\nCoba foto yang lebih jelas atau ketik manual aja.", { parse_mode: "Markdown" });
+        return;
+      }
+
+      // Save all expenses
+      const saved = [];
+      for (const exp of result.expenses) {
+        const expense = await prisma.expense.create({
+          data: {
+            amount: exp.amount,
+            item: exp.item,
+            category: exp.category,
+            place: exp.place || result.merchant || null,
+            withPerson: null,
+            mood: null,
+            story: null,
+            rawMessage: caption || "[receipt photo]",
+            tgId,
+            date: new Date(exp.date),
+          },
+        });
+        saved.push(expense);
+      }
+
+      let msg = "🧾 *Struk terbaca!*\n\n";
+      if (result.merchant) {
+        msg += `📍 ${result.merchant}\n\n`;
+      }
+      for (const e of saved) {
+        msg += `${getEmoji(e.category)} ${e.item} — *${fmt(e.amount)}*\n`;
+      }
+
+      const total = saved.reduce((s, e) => s + e.amount, 0);
+      msg += `\n💰 *Total: ${fmt(total)}*`;
+
+      const todayTotal = await prisma.expense.aggregate({
+        where: { tgId, date: { gte: startOfDay(new Date()), lte: endOfDay(new Date()) } },
+        _sum: { amount: true },
+      });
+
+      msg += `\n📊 Total hari ini: *${fmt(todayTotal._sum.amount || 0)}*`;
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+    } catch (error) {
+      console.error("Photo processing error:", error);
+      await ctx.reply("Error proses foto 😅 Coba lagi ya.");
+    }
   });
 
   return bot;
