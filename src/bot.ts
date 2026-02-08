@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import { PrismaClient } from "@prisma/client";
 import { parseExpense, parseReceipt } from "./ai.js";
 import {
@@ -29,15 +29,34 @@ const fmt = (n: number) => "Rp" + n.toLocaleString("id-ID");
 const getEmoji = (cat: string) => CAT_EMOJI[cat.toLowerCase()] || "💸";
 const getMood = (mood: string | null) => mood ? MOOD_EMOJI[mood.toLowerCase()] || "" : "";
 
+const mainKeyboard = new Keyboard()
+  .text("📅 Today").text("📊 Week").text("📊 Month").row()
+  .text("📝 Recent").text("↩️ Undo")
+  .resized()
+  .persistent();
+
+const BUTTON_COMMANDS: Record<string, string> = {
+  "📅 Today": "/today",
+  "📊 Week": "/week",
+  "📊 Month": "/month",
+  "📝 Recent": "/recent",
+  "↩️ Undo": "/undo",
+};
+
 export function createBot(token: string) {
   const bot = new Bot(token);
 
   bot.command("start", async (ctx) => {
     const name = ctx.from?.first_name || "there";
+    const webUrl = process.env.WEB_URL || "https://aturuang.hanif.app";
+
+    const dashboardKb = new InlineKeyboard().webApp("📊 Buka Dashboard", webUrl);
     await ctx.reply(
-      `Yo ${name}! 👋\n\nGue *AturUang* — SatuRuang buat atur keuangan lo.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n📸 *Foto struk/invoice juga bisa!*\nKirim foto struk ShopeeFood, GrabFood, atau struk belanja — gue baca otomatis.\n\n*Commands:*\n/today • /week • /month\n/recent • /undo\n/setpassword • /customid\n\nGas! 💸`,
-      { parse_mode: "Markdown" }
+      `Yo ${name}! 👋\n\nGue *AturUang* — SatuRuang buat atur keuangan lo.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n📸 *Foto struk/invoice juga bisa!*\nKirim foto struk ShopeeFood, GrabFood, atau struk belanja — gue baca otomatis.`,
+      { parse_mode: "Markdown", reply_markup: dashboardKb }
     );
+
+    await ctx.reply("Gas! Cerita pengeluaran lo 💸", { reply_markup: mainKeyboard });
   });
 
   bot.command("setpassword", async (ctx) => {
@@ -231,10 +250,46 @@ export function createBot(token: string) {
     await ctx.answerCallbackQuery();
   });
 
+  bot.callbackQuery(/^delbatch:(.+)$/, async (ctx) => {
+    const refId = ctx.match[1];
+    const ref = await prisma.expense.findUnique({ where: { id: refId } });
+    if (!ref) {
+      await ctx.editMessageText("✅ Udah dihapus sebelumnya");
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    await prisma.expense.deleteMany({
+      where: {
+        tgId: ref.tgId,
+        rawMessage: ref.rawMessage,
+        createdAt: {
+          gte: new Date(ref.createdAt.getTime() - 2000),
+          lte: new Date(ref.createdAt.getTime() + 2000),
+        },
+      },
+    });
+    await ctx.editMessageText("✅ Semua dihapus");
+    await ctx.answerCallbackQuery();
+  });
+
   bot.on("message:text", async (ctx) => {
     const tgId = ctx.from?.id.toString();
     const message = ctx.message.text;
     if (!tgId || message.startsWith("/")) return;
+
+    // Handle reply keyboard buttons
+    const buttonCmd = BUTTON_COMMANDS[message];
+    if (buttonCmd) {
+      await bot.handleUpdate({
+        ...ctx.update,
+        message: {
+          ...ctx.update.message!,
+          text: buttonCmd,
+          entities: [{ type: "bot_command" as const, offset: 0, length: buttonCmd.length }],
+        },
+      });
+      return;
+    }
 
     await ctx.replyWithChatAction("typing");
     const result = await parseExpense(message);
@@ -278,7 +333,16 @@ export function createBot(token: string) {
     });
 
     msg += `\n📊 Total hari ini: *${fmt(todayTotal._sum.amount || 0)}*`;
-    await ctx.reply(msg, { parse_mode: "Markdown" });
+
+    const deleteKb = new InlineKeyboard();
+    if (saved.length === 1) {
+      deleteKb.text("🗑 Hapus", `del:${saved[0].id}`);
+    } else {
+      for (const e of saved) {
+        deleteKb.text(`🗑 ${e.item}`, `del:${e.id}`).row();
+      }
+    }
+    await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: deleteKb });
   });
 
   // Handle photo messages (receipts, invoices)
@@ -350,7 +414,16 @@ export function createBot(token: string) {
       });
 
       msg += `\n📊 Total hari ini: *${fmt(todayTotal._sum.amount || 0)}*`;
-      await ctx.reply(msg, { parse_mode: "Markdown" });
+
+      const deleteKb = new InlineKeyboard();
+      if (saved.length <= 3) {
+        for (const e of saved) {
+          deleteKb.text(`🗑 ${e.item}`, `del:${e.id}`).row();
+        }
+      } else {
+        deleteKb.text("🗑 Hapus Semua", `delbatch:${saved[0].id}`);
+      }
+      await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: deleteKb });
     } catch (error) {
       console.error("Photo processing error:", error);
       await ctx.reply("Error proses foto 😅 Coba lagi ya.");

@@ -21,6 +21,24 @@ async function main() {
   // Start bot
   const bot = createBot(botToken);
 
+  // Register commands for Telegram menu
+  await bot.api.setMyCommands([
+    { command: "start", description: "Mulai / restart bot" },
+    { command: "today", description: "Pengeluaran hari ini" },
+    { command: "week", description: "Ringkasan minggu ini" },
+    { command: "month", description: "Ringkasan bulan ini" },
+    { command: "recent", description: "10 transaksi terakhir" },
+    { command: "undo", description: "Hapus transaksi terakhir" },
+    { command: "setpassword", description: "Set password dashboard" },
+    { command: "customid", description: "Set custom login ID" },
+  ]);
+
+  // Set menu button to open dashboard
+  const webUrl = process.env.WEB_URL || "https://aturuang.hanif.app";
+  await bot.api.setChatMenuButton({
+    menu_button: { type: "web_app", text: "Dashboard", web_app: { url: webUrl } },
+  });
+
   bot.catch((err) => {
     console.error("Bot error:", err);
   });
