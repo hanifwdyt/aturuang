@@ -35,7 +35,7 @@ export function createBot(token: string) {
   bot.command("start", async (ctx) => {
     const name = ctx.from?.first_name || "there";
     await ctx.reply(
-      `Hey ${name}! 👋\n\nGue *DuitBot* — asisten catat pengeluaran lo.\n\n*Cara pakai:*\nLangsung cerita aja, contoh:\n• makan soto 20k\n• kopi 35k di starbucks\n• grab 45k kemarin\n\n*Commands:*\n/today • /week • /month\n/recent • /undo • /setpassword\n\nLet's go! 💰`,
+      `Yo ${name}! 👋\n\nGue *AturUang* — temen lo buat catat pengeluaran.\n\n*Cara pakai:*\nCerita aja kayak chat biasa:\n• _makan soto 20k_\n• _kopi 35k di starbucks sama temen_\n• _grab 45k kemarin, males jalan_\n\n*Commands:*\n/today • /week • /month\n/recent • /undo • /setpassword\n\nGas! 💸`,
       { parse_mode: "Markdown" }
     );
   });
@@ -58,7 +58,7 @@ export function createBot(token: string) {
 
     const webUrl = process.env.WEB_URL || "https://aturuang.hanif.app";
     await ctx.reply(
-      `✅ Password set!\n\nAkses dashboard:\n${webUrl}\n\nID: \`${tgId}\``,
+      `✅ Password udah ke-set!\n\nBuka dashboard di:\n${webUrl}\n\nLogin pake ID: \`${tgId}\``,
       { parse_mode: "Markdown" }
     );
   });
@@ -207,7 +207,7 @@ export function createBot(token: string) {
     const result = await parseExpense(message);
 
     if (result.error || result.expenses.length === 0) {
-      await ctx.reply("🤔 Ga nemu info expense.\n\nContoh: _makan soto 20k_", { parse_mode: "Markdown" });
+      await ctx.reply("Hmm gue ga nangkep 🤔\n\nCoba gini: _makan soto 20k_", { parse_mode: "Markdown" });
       return;
     }
 
@@ -230,12 +230,13 @@ export function createBot(token: string) {
       saved.push(expense);
     }
 
-    let msg = "";
+    let msg = "✅ Noted!\n\n";
     for (const e of saved) {
       const mood = getMood(e.mood);
       msg += `${getEmoji(e.category)} *${e.item}* — ${fmt(e.amount)}${mood ? ` ${mood}` : ""}\n`;
-      if (e.place) msg += `└ 📍 ${e.place}\n`;
-      if (e.story) msg += `└ _${e.story}_\n`;
+      if (e.place) msg += `   📍 ${e.place}\n`;
+      if (e.withPerson) msg += `   👥 ${e.withPerson}\n`;
+      if (e.story) msg += `   💭 _${e.story}_\n`;
     }
 
     const todayTotal = await prisma.expense.aggregate({
@@ -243,7 +244,7 @@ export function createBot(token: string) {
       _sum: { amount: true },
     });
 
-    msg += `\n💰 Hari ini: *${fmt(todayTotal._sum.amount || 0)}*`;
+    msg += `\n📊 Total hari ini: *${fmt(todayTotal._sum.amount || 0)}*`;
     await ctx.reply(msg, { parse_mode: "Markdown" });
   });
 
