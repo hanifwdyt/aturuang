@@ -98,7 +98,7 @@ export async function parseExpense(
     const yesterdayStr = yesterday.toISOString().split("T")[0];
 
     const response = await openai.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: "anthropic/claude-sonnet-4.5",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -188,7 +188,7 @@ export async function parseReceipt(
     const todayStr = today.toISOString().split("T")[0];
 
     const response = await openai.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: "anthropic/claude-sonnet-4.5",
       messages: [
         { role: "system", content: RECEIPT_PROMPT },
         {
