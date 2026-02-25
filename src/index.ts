@@ -2,6 +2,7 @@ import "dotenv/config";
 import { serve } from "@hono/node-server";
 import { createBot } from "./bot.js";
 import { createWeb } from "./web.js";
+import { createApi } from "./api/index.js";
 
 const WEB_PORT = parseInt(process.env.WEB_PORT || "3000");
 
@@ -14,8 +15,11 @@ async function main() {
 
   // Start web server
   const web = createWeb();
+  const api = createApi();
+  web.route("/", api);
   serve({ fetch: web.fetch, port: WEB_PORT }, (info) => {
     console.log(`🌐 Web server running at http://localhost:${info.port}`);
+    console.log(`📖 API docs at http://localhost:${info.port}/reference`);
   });
 
   // Start bot

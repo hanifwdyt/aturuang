@@ -310,6 +310,7 @@ export function createBot(token: string) {
       return;
     }
 
+    try {
     await ctx.replyWithChatAction("typing");
     const result = await parseExpense(message);
 
@@ -362,6 +363,10 @@ export function createBot(token: string) {
       }
     }
     await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: deleteKb });
+    } catch (error) {
+      console.error("Text message processing error:", error);
+      await ctx.reply("Waduh error nih 😅 Coba lagi ya.");
+    }
   });
 
   // Handle photo messages (receipts, invoices)

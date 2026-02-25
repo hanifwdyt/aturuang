@@ -9,13 +9,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  tgId      String   @unique
-  customId  String?  @unique
-  password  String?
-  name      String?
-  theme     String   @default("dark")
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  tgId           String   @unique
+  customId       String?  @unique
+  email          String?  @unique
+  password       String?
+  hashedPassword String?
+  name           String?
+  theme          String   @default("dark")
+  createdAt      DateTime @default(now())
 
   @@map("users")
 }
