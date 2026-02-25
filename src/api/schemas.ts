@@ -111,9 +111,10 @@ export const ExpenseSummaryResponse = z
     week: z.object({ total: z.number(), count: z.number() }),
     month: z.object({ total: z.number(), count: z.number() }),
     byCategory: z.record(
+      z.string(),
       z.object({ total: z.number(), count: z.number() })
     ),
-    byMood: z.record(z.number()),
+    byMood: z.record(z.string(), z.number()),
   })
   .openapi("ExpenseSummaryResponse");
 

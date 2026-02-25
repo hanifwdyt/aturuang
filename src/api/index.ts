@@ -310,9 +310,9 @@ export function createApi() {
     "/reference",
     apiReference({
       theme: "kepler",
-      spec: { url: "/doc" },
+      url: "/doc",
       pageTitle: "AturUang API Reference",
-    })
+    } as any)
   );
 
   return app;
