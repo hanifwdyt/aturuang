@@ -4,7 +4,7 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package*.json .npmrc ./
 RUN npm ci
 
 COPY prisma ./prisma
